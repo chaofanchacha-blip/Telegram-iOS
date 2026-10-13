@@ -1,0 +1,62 @@
+name: Build TG IPA (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 350
+    steps:
+      - name: Show runner info
+        run: |
+          sw_vers
+          ls -d /Applications/Xcode*.app || true
+          df -h /
+          sysctl hw.memsize
+
+      - name: Free disk (keep newest Xcode only)
+        run: |
+          KEEP=$(ls -d /Applications/Xcode*.app | sort -V | tail -1)
+          echo "Keeping $KEEP"
+          for x in /Applications/Xcode*.app; do
+            [ "$x" != "$KEEP" ] && sudo rm -rf "$x" || true
+          done
+          sudo xcode-select -s "$KEEP"
+          xcodebuild -version
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Bazel cache
+        uses: actions/cache@v4
+        with:
+          path: ~/telegram-bazel-cache
+          key: bazel-macos-arm64-${{ github.sha }}
+          restore-keys: bazel-macos-arm64-
+
+      - name: Cap build concurrency for 7GB runner
+        run: |
+          echo "build --jobs=2" >> .bazelrc
+
+      - name: Build release_arm64 (fake codesigning)
+        run: |
+          python3 -u build-system/Make/Make.py \
+            --cacheDir="$HOME/telegram-bazel-cache" \
+            build \
+            --configurationPath=build-system/myfork-configuration.json \
+            --codesigningInformationPath=build-system/fake-codesigning \
+            --buildNumber=100001 \
+            --configuration=release_arm64 \
+            --overrideXcodeVersion
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Telegram-ipa
+          path: build/artifacts/Telegram.ipa
+          if-no-files-found: error
