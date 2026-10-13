@@ -1601,7 +1601,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     let _ = ApplicationSpecificNotice.setDisplayChatListArchiveTooltip(accountManager: self.context.sharedContext.accountManager).startStandalone()
                     #endif
                     
-                    self.push(ArchiveInfoScreen(context: self.context, settings: settings))
+                    // POR-FIX-ARCHNAV: tip flatModal overlay removed (broke back navigation) self.push(ArchiveInfoScreen(context: self.context, settings: settings))
                 }
             })
         }
@@ -3788,6 +3788,18 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
     
     private func navigationBackPressed() {
         self.dismiss()
+        // POR-FIX-ARCHNAV: fallback - if dismiss was swallowed, force-remove self from stack next tick
+        DispatchQueue.main.async { [weak self] in
+            guard let self else {
+                return
+            }
+            if let navigationController = self.navigationController as? NavigationController {
+                if navigationController.viewControllers.contains(where: { $0 === self }) {
+                    let controllers = navigationController.viewControllers.filter { $0 !== self }
+                    navigationController.setViewControllers(controllers, animated: false)
+                }
+            }
+        }
     }
     
     public static func openMoreMenu(context: AccountContext, peerId: EnginePeer.Id, sourceController: ViewController, isViewingAsTopics: Bool, sourceView: UIView, gesture: ContextGesture?) {
@@ -3994,7 +4006,7 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                         guard let self else {
                             return
                         }
-                        self.push(ArchiveInfoScreen(context: self.context, settings: settings))
+                        // POR-FIX-ARCHNAV: tip flatModal overlay removed (broke back navigation) self.push(ArchiveInfoScreen(context: self.context, settings: settings))
                     })
                 })))
                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.ChatList_ContextSelectChats, icon: { theme in
