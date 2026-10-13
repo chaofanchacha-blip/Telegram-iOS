@@ -57,6 +57,12 @@ jobs:
             --buildNumber=100001 \
             --configuration=release_arm64
 
+      - name: Collect IPA
+        run: |
+          mkdir -p build/artifacts
+          cp bazel-bin/Telegram/Telegram.ipa build/artifacts/Telegram.ipa
+          ls -lh build/artifacts/
+
       - name: Bazel cache (save even on failure)
         if: always()
         uses: actions/cache/save@v4
