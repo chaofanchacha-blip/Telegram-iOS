@@ -46,6 +46,14 @@ jobs:
           echo "startup --host_jvm_args=-Xmx1g" >> .bazelrc
           echo "build --jobs=3" >> .bazelrc
 
+      - name: Configure Bazel remote cache (persistent, on our own VPS)
+        if: env.POR_BAZEL_REMOTE != ''
+        run: |
+          echo "build --remote_cache=$POR_BAZEL_REMOTE" >> .bazelrc
+          echo "build --remote_upload_local_results=true" >> .bazelrc
+        env:
+          POR_BAZEL_REMOTE: ${{ secrets.POR_BAZEL_REMOTE }}
+
       - name: Build release_arm64 (fake codesigning)
         run: |
           python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
