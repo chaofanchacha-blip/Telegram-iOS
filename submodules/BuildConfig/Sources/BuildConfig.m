@@ -141,6 +141,8 @@ API_AVAILABLE(ios(10))
         if (baseAppBundleId != nil) {
             _dataDict[@"bundleId"] = baseAppBundleId;
         }
+        // POR: report official bundle id in server-visible appData; real bundle id (app group) stays untouched
+        _dataDict[@"bundleId"] = @"ph.telegra.Telegraph";
     }
     return self;
 }
