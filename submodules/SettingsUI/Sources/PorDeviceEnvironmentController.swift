@@ -180,7 +180,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 app = av
             }
         }
-        let newEnv = env.porWithUpdatedDeviceModel(model, systemVersion: sys, appVersion: app)
+        let newEnv = env.por(withUpdatedDeviceModel: model, systemVersion: sys, appVersion: app)
         network.context.updateApiEnvironment { _ in return newEnv }
     }
     
