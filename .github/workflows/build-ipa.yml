@@ -34,8 +34,8 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Bazel cache
-        uses: actions/cache@v4
+      - name: Bazel cache (restore)
+        uses: actions/cache/restore@v4
         with:
           path: ~/telegram-bazel-cache
           key: bazel-macos-arm64-${{ github.sha }}
@@ -48,6 +48,7 @@ jobs:
 
       - name: Build release_arm64 (fake codesigning)
         run: |
+          python3 build-system/Make/ImportCertificates.py --path build-system/fake-codesigning/certs
           python3 -u build-system/Make/Make.py \
             --cacheDir="$HOME/telegram-bazel-cache" \
             build \
@@ -55,6 +56,13 @@ jobs:
             --codesigningInformationPath=build-system/fake-codesigning \
             --buildNumber=100001 \
             --configuration=release_arm64
+
+      - name: Bazel cache (save even on failure)
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/telegram-bazel-cache
+          key: bazel-macos-arm64-${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
