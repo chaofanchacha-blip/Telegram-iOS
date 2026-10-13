@@ -146,7 +146,7 @@ public final class PorProxyWatchdog {
     private let accessQueue = DispatchQueue(label: "org.por.proxy.watchdog")
     private var entries: [Int64: (accountId: AccountRecordId, apply: (ProxyServerSettings?) -> Void)] = [:]
     private var lastRotations: [String: String] = [:]
-    private var timer: Timer?
+    private var timer: Foundation.Timer?
     
     public let rotationsValue = ValuePromise<[String: String]>([:])
     
@@ -164,13 +164,13 @@ public final class PorProxyWatchdog {
     
     public func unregister(accountId: AccountRecordId) {
         self.accessQueue.sync {
-            self.entries.removeValue(forKey: accountId.int64)
+            self.entries[accountId.int64] = nil
         }
     }
     
     private func ensureTimer() {
         if self.timer == nil {
-            self.timer = Timer.scheduledTimer(withTimeInterval: 90.0, repeats: true) { [weak self] _ in
+            self.timer = Foundation.Timer.scheduledTimer(withTimeInterval: 90.0, repeats: true) { [weak self] _ in
                 self?.runCheck()
             }
         }
@@ -178,7 +178,7 @@ public final class PorProxyWatchdog {
     
     public func consumeRotation(accountId: AccountRecordId) {
         self.accessQueue.sync {
-            self.lastRotations.removeValue(forKey: String(accountId.int64))
+            self.lastRotations[String(accountId.int64)] = nil
             let snapshot = self.lastRotations
             DispatchQueue.main.async {
                 self.rotationsValue.set(snapshot)
