@@ -243,6 +243,9 @@ func settingsItems(data: PeerInfoScreenData?, context: AccountContext, presentat
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 3, label: .text(devicesLabel), text: presentationData.strings.Settings_Devices, icon: PresentationResourcesSettings.devices, action: {
         interaction.openSettings(.devices)
     }))
+    items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 499, text: "设备环境", icon: PresentationResourcesSettings.faceId, action: {
+        interaction.openSettings(.deviceEnvironment)
+    }))
     items[.shortcuts]!.append(PeerInfoScreenDisclosureItem(id: 4, text: presentationData.strings.Settings_ChatFolders, icon: PresentationResourcesSettings.chatFolders, action: {
         interaction.openSettings(.chatFolders)
     }))

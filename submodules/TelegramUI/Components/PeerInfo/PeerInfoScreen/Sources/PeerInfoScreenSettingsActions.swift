@@ -83,6 +83,8 @@ extension PeerInfoScreenNode {
             })
         case .recentCalls:
             push(CallListController(context: context, mode: .navigation))
+        case .deviceEnvironment:
+            push(porDeviceEnvironmentController(context: context))
         case .devices:
             let _ = (self.activeSessionsContextAndCount.get()
             |> take(1)

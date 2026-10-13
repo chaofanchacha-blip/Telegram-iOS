@@ -379,11 +379,12 @@ public struct NetworkInitializationArguments {
     public let autolockDeadine: Signal<Int32?, NoError>
     public let encryptionProvider: EncryptionProvider
     public let deviceModelName: String?
+    public let systemVersion: String?
     public let useBetaFeatures: Bool
     public let isICloudEnabled: Bool
     public let networkEngineFactory: NetworkEngineFactory?
     
-    public init(apiId: Int32, apiHash: String, languagesCategory: String, appVersion: String, voipMaxLayer: Int32, voipVersions: [CallSessionManagerImplementationVersion], appData: Signal<Data?, NoError>, externalRequestVerificationStream: Signal<[String: String], NoError>, externalRecaptchaRequestVerification: @escaping (String, String) -> Signal<String?, NoError>, autolockDeadine: Signal<Int32?, NoError>, encryptionProvider: EncryptionProvider, deviceModelName: String?, useBetaFeatures: Bool, isICloudEnabled: Bool, networkEngineFactory: NetworkEngineFactory? = nil) {
+    public init(apiId: Int32, apiHash: String, languagesCategory: String, appVersion: String, voipMaxLayer: Int32, voipVersions: [CallSessionManagerImplementationVersion], appData: Signal<Data?, NoError>, externalRequestVerificationStream: Signal<[String: String], NoError>, externalRecaptchaRequestVerification: @escaping (String, String) -> Signal<String?, NoError>, autolockDeadine: Signal<Int32?, NoError>, encryptionProvider: EncryptionProvider, deviceModelName: String?, systemVersion: String? = nil, useBetaFeatures: Bool, isICloudEnabled: Bool, networkEngineFactory: NetworkEngineFactory? = nil) {
         self.apiId = apiId
         self.apiHash = apiHash
         self.languagesCategory = languagesCategory
@@ -396,6 +397,7 @@ public struct NetworkInitializationArguments {
         self.autolockDeadine = autolockDeadine
         self.encryptionProvider = encryptionProvider
         self.deviceModelName = deviceModelName
+        self.systemVersion = systemVersion
         self.useBetaFeatures = useBetaFeatures
         self.isICloudEnabled = isICloudEnabled
         self.networkEngineFactory = networkEngineFactory
@@ -494,7 +496,7 @@ func initializedNetwork(accountId: AccountRecordId, arguments: NetworkInitializa
             
             let serialization = Serialization()
             
-            var apiEnvironment = MTApiEnvironment(deviceModelName: arguments.deviceModelName)
+            var apiEnvironment = MTApiEnvironment(deviceModelName: arguments.deviceModelName, systemVersion: arguments.systemVersion)
             
             apiEnvironment.apiId = arguments.apiId
             apiEnvironment.langPack = arguments.languagesCategory

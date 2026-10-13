@@ -86,5 +86,6 @@
 - (MTApiEnvironment * _Nonnull)withUpdatedSystemCode:(NSData * _Nullable)systemCode;
 
 -(id _Nonnull)initWithDeviceModelName:(NSString * _Nullable)deviceModelName;
+-(id _Nonnull)initWithDeviceModelName:(NSString * _Nullable)deviceModelName systemVersion:(NSString * _Nullable)systemVersion;
 
 @end
