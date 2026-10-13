@@ -6,13 +6,15 @@ public struct PorDeviceProfile: Codable, Equatable {
     public var systemVersion: String?
     public var appVersion: String?
     public var proxySpec: String?
+    public var proxyPool: [String]?
     
-    public init(name: String, model: String?, systemVersion: String?, appVersion: String?, proxySpec: String?) {
+    public init(name: String, model: String?, systemVersion: String?, appVersion: String?, proxySpec: String?, proxyPool: [String]? = nil) {
         self.name = name
         self.model = model
         self.systemVersion = systemVersion
         self.appVersion = appVersion
         self.proxySpec = proxySpec
+        self.proxyPool = proxyPool
     }
 }
 
@@ -24,12 +26,46 @@ public final class PorDeviceProfileStore {
     private init() {
     }
     
-    public static let presets: [PorDeviceProfile] = [
+    public static let catalog: [PorDeviceProfile] = [
+        PorDeviceProfile(name: "iPhone 18 Pro Max", model: "iPhone 18 Pro Max", systemVersion: "27.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 18 Pro", model: "iPhone 18 Pro", systemVersion: "27.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 18", model: "iPhone 18", systemVersion: "27.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
         PorDeviceProfile(name: "iPhone 17 Pro Max", model: "iPhone 17 Pro Max", systemVersion: "26.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 17 Pro", model: "iPhone 17 Pro", systemVersion: "26.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 17", model: "iPhone 17", systemVersion: "26.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 16 Pro Max", model: "iPhone 16 Pro Max", systemVersion: "26.0.3", appVersion: "12.8.1 (33181)", proxySpec: nil),
         PorDeviceProfile(name: "iPhone 16 Pro", model: "iPhone 16 Pro", systemVersion: "26.0.3", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 16", model: "iPhone 16", systemVersion: "26.0.3", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 15 Pro Max", model: "iPhone 15 Pro Max", systemVersion: "26.0.2", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 15 Pro", model: "iPhone 15 Pro", systemVersion: "26.0.2", appVersion: "12.8.1 (33181)", proxySpec: nil),
         PorDeviceProfile(name: "iPhone 15", model: "iPhone 15", systemVersion: "26.0.2", appVersion: "12.8.1 (33181)", proxySpec: nil),
-        PorDeviceProfile(name: "iPad Pro", model: "iPad Pro", systemVersion: "26.1", appVersion: "12.8.1 (33181)", proxySpec: nil)
+        PorDeviceProfile(name: "iPhone 14 Pro Max", model: "iPhone 14 Pro Max", systemVersion: "26.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 14 Pro", model: "iPhone 14 Pro", systemVersion: "26.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 14", model: "iPhone 14", systemVersion: "26.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 13 Pro Max", model: "iPhone 13 Pro Max", systemVersion: "26.0", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 13 Pro", model: "iPhone 13 Pro", systemVersion: "26.0", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 13", model: "iPhone 13", systemVersion: "26.0", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 12 Pro Max", model: "iPhone 12 Pro Max", systemVersion: "18.5.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 12 Pro", model: "iPhone 12 Pro", systemVersion: "18.5.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 12", model: "iPhone 12", systemVersion: "18.5.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 11 Pro Max", model: "iPhone 11 Pro Max", systemVersion: "18.4.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 11 Pro", model: "iPhone 11 Pro", systemVersion: "18.4.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "iPhone 11", model: "iPhone 11", systemVersion: "18.4.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "Por Max", model: "Por Max", systemVersion: "27.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil),
+        PorDeviceProfile(name: "Por", model: "Por", systemVersion: "27.0.1", appVersion: "12.8.1 (33181)", proxySpec: nil)
     ]
+    
+    public static func randomProfile(excludingModel: String?) -> PorDeviceProfile {
+        var candidates = catalog
+        if let current = excludingModel, candidates.count > 1 {
+            candidates = candidates.filter { $0.model != current }
+        }
+        return candidates[Int.random(in: 0..<candidates.count)]
+    }
+    
+    public static func parseProxyPool(_ text: String) -> [String] {
+        return text.split(whereSeparator: { $0 == ";" || $0 == "\n" }).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
     
     public func profile(accountId: AccountRecordId) -> PorDeviceProfile? {
         guard let data = UserDefaults.standard.data(forKey: self.key) else {
