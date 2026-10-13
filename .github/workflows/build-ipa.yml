@@ -25,7 +25,7 @@ jobs:
         run: |
           KEEP=$(python3 -c "import glob;print(max(glob.glob('/Applications/Xcode*.app'),key=lambda p:[int(x) for x in __import__('re').findall(r'\d+',p)]))")
           echo "Keeping $KEEP"
-          sudo python3 -c "import glob,shutil,sys;keep=sys.argv[1];[shutil.rmtree(x) for x in glob.glob('/Applications/Xcode*.app') if x!=keep]" "$KEEP"
+          sudo python3 -c "import glob,shutil,os,sys;keep=sys.argv[1];[os.remove(x) if os.path.islink(x) else shutil.rmtree(x) for x in glob.glob('/Applications/Xcode*.app') if x!=keep]" "$KEEP"
           sudo xcode-select -s "$KEEP"
           xcodebuild -version
           df -h /
