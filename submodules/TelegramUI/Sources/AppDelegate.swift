@@ -251,6 +251,42 @@ private func resolvedAppGroupName(baseAppBundleId: String) -> String {
     return primary
 }
 
+private func migrateLegacyGroupDataIfNeeded(to target: URL) {
+    let fm = FileManager.default
+    guard let existing = try? fm.contentsOfDirectory(atPath: target.path), existing.isEmpty else {
+        return
+    }
+    for legacyName in ["group.1009.1", "group.1009.2", "group.1009.3", "group.1009.4", "group.1009.5"] {
+        guard let legacy = fm.containerURL(forSecurityApplicationGroupIdentifier: legacyName) else {
+            continue
+        }
+        guard let items = try? fm.contentsOfDirectory(atPath: legacy.path) else {
+            continue
+        }
+        guard items.contains("telegram-data") else {
+            continue
+        }
+        for item in items {
+            let from = legacy.appendingPathComponent(item)
+            let to = target.appendingPathComponent(item)
+            try? fm.moveItem(at: from, to: to)
+        }
+        return
+    }
+}
+
+private func resolvedAppGroupUrl(baseAppBundleId: String) -> URL {
+    let primary = "group.\(baseAppBundleId)"
+    if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: primary) {
+        return url
+    }
+    let supportDir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first ?? URL(fileURLWithPath: NSTemporaryDirectory())
+    let target = supportDir.appendingPathComponent("TelegramLocalGroupData", isDirectory: true)
+    try? FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+    migrateLegacyGroupDataIfNeeded(to: target)
+    return target
+}
+
 @objc(AppDelegate) class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, UNUserNotificationCenterDelegate, URLSessionDelegate, URLSessionTaskDelegate {
     @objc var window: UIWindow?
     var nativeWindow: (UIWindow & WindowHost)?
@@ -328,7 +364,9 @@ private func resolvedAppGroupName(baseAppBundleId: String) -> String {
         let appGroupName = resolvedAppGroupName(baseAppBundleId: baseAppBundleId)
 
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
-        configuration.sharedContainerIdentifier = appGroupName
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName) != nil {
+            configuration.sharedContainerIdentifier = appGroupName
+        }
         configuration.isDiscretionary = false
         let session = URLSession(configuration: configuration, delegate: self, delegateQueue: .main)
         self.urlSessions.append(session)
@@ -575,7 +613,7 @@ private func resolvedAppGroupName(baseAppBundleId: String) -> String {
         try! PasscodeEnvironment.shared.configure(PasscodeConfiguration(appGroupIdentifier: appGroupName, processRole: .mainApp, biometricKeychainService: walletBiometricKeychainService), privateAccessGroup: {
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
-        let maybeAppGroupUrl = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupName)
+        let maybeAppGroupUrl: URL? = resolvedAppGroupUrl(baseAppBundleId: baseAppBundleId)
         
         let buildConfig = BuildConfig(baseAppBundleId: baseAppBundleId)
         self.buildConfig = buildConfig
