@@ -238,6 +238,19 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
     )
 }
 
+private func resolvedAppGroupName(baseAppBundleId: String) -> String {
+    let primary = "group.\(baseAppBundleId)"
+    if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: primary) != nil {
+        return primary
+    }
+    for candidate in ["group.1009.1", "group.1009.2", "group.1009.3", "group.1009.4", "group.1009.5"] {
+        if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: candidate) != nil {
+            return candidate
+        }
+    }
+    return primary
+}
+
 @objc(AppDelegate) class AppDelegate: UIResponder, UIApplicationDelegate, PKPushRegistryDelegate, UNUserNotificationCenterDelegate, URLSessionDelegate, URLSessionTaskDelegate {
     @objc var window: UIWindow?
     var nativeWindow: (UIWindow & WindowHost)?
@@ -312,7 +325,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         }
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
-        let appGroupName = "group.\(baseAppBundleId)"
+        let appGroupName = resolvedAppGroupName(baseAppBundleId: baseAppBundleId)
 
         let configuration = URLSessionConfiguration.background(withIdentifier: identifier)
         configuration.sharedContainerIdentifier = appGroupName
@@ -558,7 +571,7 @@ private func extractAccountManagerState(records: AccountRecordsView<TelegramAcco
         let appVersion = (Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String) ?? "unknown"
         
         let baseAppBundleId = Bundle.main.bundleIdentifier!
-        let appGroupName = "group.\(baseAppBundleId)"
+        let appGroupName = resolvedAppGroupName(baseAppBundleId: baseAppBundleId)
         try! PasscodeEnvironment.shared.configure(PasscodeConfiguration(appGroupIdentifier: appGroupName, processRole: .mainApp, biometricKeychainService: walletBiometricKeychainService), privateAccessGroup: {
             BuildConfig.keychainAccessGroup(baseAppBundleId: baseAppBundleId)
         })
