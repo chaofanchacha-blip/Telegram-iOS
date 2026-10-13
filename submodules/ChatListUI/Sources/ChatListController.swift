@@ -4002,11 +4002,8 @@ public class ChatListControllerImpl: TelegramBaseController, ChatListController 
                     let _ = (self.context.engine.data.get(
                         TelegramEngine.EngineData.Item.Configuration.GlobalPrivacy()
                     )
-                    |> deliverOnMainQueue).startStandalone(next: { [weak self] settings in
-                        guard let self else {
-                            return
-                        }
-                        // POR-FIX-ARCHNAV: tip flatModal overlay removed (broke back navigation) self.push(ArchiveInfoScreen(context: self.context, settings: settings))
+                    |> deliverOnMainQueue).startStandalone(next: { _ in
+                        // POR-FIX-ARCHNAV: archive info tip (flatModal overlay) removed - broke back navigation
                     })
                 })))
                 items.append(.action(ContextMenuActionItem(text: presentationData.strings.ChatList_ContextSelectChats, icon: { theme in
