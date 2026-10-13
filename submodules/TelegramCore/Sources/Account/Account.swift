@@ -214,7 +214,8 @@ public class UnauthorizedAccount {
 
         self.proxySettingsDisposable.set((accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> ProxyServerSettings? in
-            return sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self)?.effectiveActiveServer
+            let shared = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self)
+            return PorDeviceProfileStore.shared.resolveProxy(accountId: self.id, shared: shared)?.effectiveActiveServer
         }
         |> distinctUntilChanged).start(next: { [weak network] activeServer in
             network?.updateProxySettings(activeServer)
@@ -1531,7 +1532,7 @@ public class Account {
         self.managedOperationsDisposable.add((accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
         |> map { sharedData -> ProxyServerSettings? in
             if let settings = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self) {
-                return settings.effectiveActiveServer
+                return PorDeviceProfileStore.shared.resolveProxy(accountId: self.id, shared: settings)?.effectiveActiveServer
             } else {
                 return nil
             }

@@ -1066,7 +1066,7 @@ public final class Network: NSObject {
         }))
     }
 
-    func updateProxySettings(_ activeServer: ProxyServerSettings?) {
+    public func updateProxySettings(_ activeServer: ProxyServerSettings?) {
         let webConfiguration = activeServer?.webProxyConfiguration
         WebProxyTransport.shared.apply(configuration: self.isAppExtension ? nil : webConfiguration)
         self.webProxyActive.set(activeServer?.isWebProxy == true)

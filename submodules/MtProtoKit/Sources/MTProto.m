@@ -2809,6 +2809,9 @@ static bool isBytesEqualConstTime(uint8_t const *bytes1, uint8_t const *bytes2, 
     [[MTProto managerQueue] dispatchOnQueue:^{
         NSString *previousLangPackCode = _apiEnvironment.langPackCode;
         MTSocksProxySettings *previousSocksProxySettings = _apiEnvironment.socksProxySettings;
+        NSString *previousDeviceModel = _apiEnvironment.deviceModel;
+        NSString *previousSystemVersion = _apiEnvironment.systemVersion;
+        NSString *previousAppVersion = _apiEnvironment.appVersion;
         
         _apiEnvironment = apiEnvironment;
         
@@ -2819,6 +2822,10 @@ static bool isBytesEqualConstTime(uint8_t const *bytes1, uint8_t const *bytes2, 
         }
         
         if (![_apiEnvironment.langPackCode isEqualToString:previousLangPackCode]) {
+            resetConnection = true;
+        }
+        
+        if (![_apiEnvironment.deviceModel isEqualToString:previousDeviceModel] || ![_apiEnvironment.systemVersion isEqualToString:previousSystemVersion] || ![_apiEnvironment.appVersion isEqualToString:previousAppVersion]) {
             resetConnection = true;
         }
         

@@ -14,6 +14,7 @@ private final class PorDeviceEnvironmentControllerArguments {
     let selectRealDevice: () -> Void
     let shuffleDevice: () -> Void
     let updateProxyPool: (String) -> Void
+    let settleProxyPool: () -> Void
     let shuffleProxy: () -> Void
     
     init(
@@ -21,12 +22,14 @@ private final class PorDeviceEnvironmentControllerArguments {
         selectRealDevice: @escaping () -> Void,
         shuffleDevice: @escaping () -> Void,
         updateProxyPool: @escaping (String) -> Void,
+        settleProxyPool: @escaping () -> Void,
         shuffleProxy: @escaping () -> Void
     ) {
         self.selectModel = selectModel
         self.selectRealDevice = selectRealDevice
         self.shuffleDevice = shuffleDevice
         self.updateProxyPool = updateProxyPool
+        self.settleProxyPool = settleProxyPool
         self.shuffleProxy = shuffleProxy
     }
 }
@@ -105,7 +108,7 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
                 arguments.selectModel(name)
             })
         case .fingerprintFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("选择此账号对外显示的设备身份（机型、系统、版本）。重启 App 后生效。"), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("选择此账号对外显示的设备身份（机型、系统、版本），点击即时生效无需重启。"), sectionId: self.section)
         case .proxyHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "代理出口 (SOCKS5)", sectionId: self.section)
         case let .proxyInfo(text):
@@ -113,13 +116,17 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
         case let .proxyPoolInput(text):
             return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "代理池"), text: text, placeholder: "host:port:用户:密码，多条用 ; 分隔", type: .regular(capitalization: false, autocorrection: false), sectionId: self.section, textUpdated: { value in
                 arguments.updateProxyPool(value)
+            }, updatedFocus: { focused in
+                if !focused {
+                    arguments.settleProxyPool()
+                }
             }, action: {})
         case .shuffleProxy:
             return ItemListActionItem(presentationData: presentationData, title: "🎲 一键更换出口 IP（轮换）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
                 arguments.shuffleProxy()
             })
         case .proxyFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("住宅或移动代理可让此账号的会话位置与指纹自洽。填写多条后可一键轮换；留空则跟随全局代理设置。"), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("住宅或移动代理可让此账号的会话位置与指纹自洽。填写多条后可一键轮换，点击即时生效；留空则跟随全局代理设置。"), sectionId: self.section)
         }
     }
 }
@@ -151,10 +158,49 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
     
     var presentUndoImpl: ((UndoOverlayContent) -> Void)?
     
+    let bundleAppVersion: String = {
+        let short = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
+        let build = (Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String) ?? ""
+        if short.isEmpty {
+            return ""
+        }
+        return "\(short) (\(build))"
+    }()
+    
+    let applyDeviceLive = { (profile: PorDeviceProfile?) in
+        let network = context.account.network
+        let env = network.context.apiEnvironment
+        var model: String? = nil
+        var sys: String? = nil
+        var app: String? = bundleAppVersion
+        if let p = profile {
+            model = p.model
+            sys = p.systemVersion
+            if let av = p.appVersion {
+                app = av
+            }
+        }
+        let newEnv = env.porWithUpdatedDeviceModel(model, systemVersion: sys, appVersion: app)
+        network.context.updateApiEnvironment { _ in return newEnv }
+    }
+    
+    let applyProxyLive = {
+        let network = context.account.network
+        let _ = (context.sharedContext.accountManager.sharedData(keys: [SharedDataKeys.proxySettings])
+        |> take(1)
+        |> deliverOnMainQueue).start(next: { sharedData in
+            let shared = sharedData.entries[SharedDataKeys.proxySettings]?.get(ProxySettings.self)
+            let resolved = PorDeviceProfileStore.shared.resolveProxy(accountId: accountId, shared: shared)
+            network.updateProxySettings(resolved?.effectiveActiveServer)
+        })
+    }
+    
     let commit = { (profile: PorDeviceProfile?) in
         currentProfile = profile
         PorDeviceProfileStore.shared.setProfile(profile, accountId: accountId)
         selectionPromise.set(profile)
+        applyDeviceLive(profile)
+        applyProxyLive()
     }
     
     let arguments = PorDeviceEnvironmentControllerArguments(
@@ -168,7 +214,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 profile.proxyPool = cur.proxyPool
             }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已选 \(preset.model ?? preset.name)，重启 App 后生效", customUndoText: nil, timeout: 5))
+            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已选 \(preset.model ?? preset.name)，已即时生效", customUndoText: nil, timeout: 5))
         },
         selectRealDevice: {
             if let cur = currentProfile, cur.model == nil {
@@ -180,7 +226,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 profile = PorDeviceProfile(name: "真实设备（保留代理）", model: nil, systemVersion: nil, appVersion: nil, proxySpec: cur.proxySpec, proxyPool: cur.proxyPool)
             }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已恢复真实设备指纹，重启 App 后生效", customUndoText: nil, timeout: 5))
+            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已恢复真实设备指纹，已即时生效", customUndoText: nil, timeout: 5))
         },
         shuffleDevice: {
             let next = PorDeviceProfileStore.randomProfile(excludingModel: currentProfile?.model)
@@ -190,24 +236,38 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 profile.proxyPool = cur.proxyPool
             }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已随机更换为 \(next.model ?? next.name)，重启 App 后生效", customUndoText: nil, timeout: 5))
+            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已随机更换为 \(next.model ?? next.name)，已即时生效", customUndoText: nil, timeout: 5))
         },
         updateProxyPool: { value in
             let pool = PorDeviceProfileStore.parseProxyPool(value)
             var profile = currentProfile ?? PorDeviceProfile(name: "自定义", model: nil, systemVersion: nil, appVersion: nil, proxySpec: nil)
             profile.proxyPool = pool.isEmpty ? nil : pool
-            if let spec = profile.proxySpec, !pool.isEmpty && !pool.contains(spec) {
-                profile.proxySpec = pool.first
-            }
-            if profile.proxySpec == nil && !pool.isEmpty {
-                profile.proxySpec = pool.first
-            }
             currentProfile = profile
             PorDeviceProfileStore.shared.setProfile(profile, accountId: accountId)
         },
+        settleProxyPool: {
+            guard var profile = currentProfile else {
+                return
+            }
+            let pool = profile.proxyPool ?? []
+            var changed = false
+            if let spec = profile.proxySpec, !pool.isEmpty && !pool.contains(spec) {
+                profile.proxySpec = pool.first
+                changed = true
+            } else if profile.proxySpec == nil && !pool.isEmpty {
+                profile.proxySpec = pool.first
+                changed = true
+            }
+            if changed {
+                currentProfile = profile
+                PorDeviceProfileStore.shared.setProfile(profile, accountId: accountId)
+                selectionPromise.set(profile)
+                applyProxyLive()
+            }
+        },
         shuffleProxy: {
             guard let cur = currentProfile else {
-                presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "请先在下方填写代理池", customUndoText: nil, timeout: 5))
+                presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "请先填写代理池", customUndoText: nil, timeout: 5))
                 return
             }
             let pool = cur.proxyPool ?? (cur.proxySpec != nil ? [cur.proxySpec!] : [])
@@ -224,7 +284,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
             var profile = cur
             profile.proxySpec = pool[nextIndex]
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已切换出口：\(pool[nextIndex])，重启 App 后生效", customUndoText: nil, timeout: 5))
+            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已切换出口：\(pool[nextIndex])，已即时生效", customUndoText: nil, timeout: 5))
         }
     )
     

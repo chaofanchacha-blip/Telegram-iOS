@@ -87,5 +87,6 @@
 
 -(id _Nonnull)initWithDeviceModelName:(NSString * _Nullable)deviceModelName;
 -(id _Nonnull)initWithDeviceModelName:(NSString * _Nullable)deviceModelName systemVersion:(NSString * _Nullable)systemVersion;
+-(MTApiEnvironment * _Nonnull)porWithUpdatedDeviceModel:(NSString * _Nullable)deviceModel systemVersion:(NSString * _Nullable)systemVersion appVersion:(NSString * _Nullable)appVersion;
 
 @end

@@ -458,6 +458,28 @@ NSString *suffix = @"";
     [self _updateApiInitializationHash];
 }
 
+- (MTApiEnvironment *)porWithUpdatedDeviceModel:(NSString * _Nullable)deviceModel systemVersion:(NSString * _Nullable)systemVersion appVersion:(NSString * _Nullable)appVersion {
+    MTApiEnvironment *result = [[MTApiEnvironment alloc] initWithDeviceModelName:deviceModel systemVersion:systemVersion];
+    result.apiId = self.apiId;
+    if (appVersion != nil) {
+        result.appVersion = appVersion;
+    } else {
+        result.appVersion = self.appVersion;
+    }
+    result.layer = self.layer;
+    result.langPack = self.langPack;
+    result->_langPackCode = self.langPackCode;
+    result->_socksProxySettings = self.socksProxySettings;
+    result->_networkSettings = self.networkSettings;
+    result->_systemCode = self.systemCode;
+    result.disableUpdates = self.disableUpdates;
+    result.tcpPayloadPrefix = self.tcpPayloadPrefix;
+    result.datacenterAddressOverrides = self.datacenterAddressOverrides;
+    result.accessHostOverride = self.accessHostOverride;
+    [result _updateApiInitializationHash];
+    return result;
+}
+
 - (NSString *)platformString
 {
 #if TARGET_OS_IPHONE
