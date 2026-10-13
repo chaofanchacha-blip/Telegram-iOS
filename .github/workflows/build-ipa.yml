@@ -41,7 +41,8 @@ jobs:
 
       - name: Cap build concurrency for 7GB runner
         run: |
-          echo "build --jobs=2" >> .bazelrc
+          echo "startup --host_jvm_args=-Xmx1g" >> .bazelrc
+          echo "build --jobs=3" >> .bazelrc
 
       - name: Build release_arm64 (fake codesigning)
         run: |
