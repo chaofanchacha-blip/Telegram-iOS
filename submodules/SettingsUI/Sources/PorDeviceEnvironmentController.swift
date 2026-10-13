@@ -9,6 +9,12 @@ import PresentationDataUtils
 import AccountContext
 import UndoUI
 
+private struct PorExportPayload: Codable {
+    var v: Int
+    var phone: String?
+    var profile: PorDeviceProfile?
+}
+
 private final class PorDeviceEnvironmentControllerArguments {
     let selectModel: (String) -> Void
     let selectRealDevice: () -> Void
@@ -16,6 +22,10 @@ private final class PorDeviceEnvironmentControllerArguments {
     let updateProxyPool: (String) -> Void
     let settleProxyPool: () -> Void
     let shuffleProxy: () -> Void
+    let checkPool: () -> Void
+    let exportConfig: () -> Void
+    let updateImportText: (String) -> Void
+    let importConfig: () -> Void
     
     init(
         selectModel: @escaping (String) -> Void,
@@ -23,7 +33,11 @@ private final class PorDeviceEnvironmentControllerArguments {
         shuffleDevice: @escaping () -> Void,
         updateProxyPool: @escaping (String) -> Void,
         settleProxyPool: @escaping () -> Void,
-        shuffleProxy: @escaping () -> Void
+        shuffleProxy: @escaping () -> Void,
+        checkPool: @escaping () -> Void,
+        exportConfig: @escaping () -> Void,
+        updateImportText: @escaping (String) -> Void,
+        importConfig: @escaping () -> Void
     ) {
         self.selectModel = selectModel
         self.selectRealDevice = selectRealDevice
@@ -31,12 +45,17 @@ private final class PorDeviceEnvironmentControllerArguments {
         self.updateProxyPool = updateProxyPool
         self.settleProxyPool = settleProxyPool
         self.shuffleProxy = shuffleProxy
+        self.checkPool = checkPool
+        self.exportConfig = exportConfig
+        self.updateImportText = updateImportText
+        self.importConfig = importConfig
     }
 }
 
 private enum PorDeviceEnvironmentSection: Int32 {
     case fingerprint
     case proxy
+    case backup
 }
 
 private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
@@ -49,15 +68,25 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
     case proxyHeader
     case proxyInfo(String)
     case proxyPoolInput(text: String)
+    case proxyHealthRow(index: Int, spec: String, status: PorProxyHealthStatus)
+    case checkPool
     case shuffleProxy
     case proxyFooter
+    
+    case backupHeader
+    case exportConfig
+    case importInput(text: String)
+    case importConfig
+    case backupFooter
     
     var section: ItemListSectionId {
         switch self {
         case .fingerprintHeader, .shuffleDevice, .fingerprintReal, .fingerprintModel, .fingerprintFooter:
             return PorDeviceEnvironmentSection.fingerprint.rawValue
-        case .proxyHeader, .proxyInfo, .proxyPoolInput, .shuffleProxy, .proxyFooter:
+        case .proxyHeader, .proxyInfo, .proxyPoolInput, .proxyHealthRow, .checkPool, .shuffleProxy, .proxyFooter:
             return PorDeviceEnvironmentSection.proxy.rawValue
+        case .backupHeader, .exportConfig, .importInput, .importConfig, .backupFooter:
+            return PorDeviceEnvironmentSection.backup.rawValue
         }
     }
     
@@ -79,10 +108,24 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
             return 202
         case .proxyPoolInput:
             return 203
+        case let .proxyHealthRow(index, _, _):
+            return 210 + Int32(index)
+        case .checkPool:
+            return 260
         case .shuffleProxy:
-            return 204
+            return 261
         case .proxyFooter:
-            return 205
+            return 262
+        case .backupHeader:
+            return 300
+        case .exportConfig:
+            return 301
+        case .importInput:
+            return 302
+        case .importConfig:
+            return 303
+        case .backupFooter:
+            return 304
         }
     }
     
@@ -96,7 +139,7 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
         case .fingerprintHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "设备指纹", sectionId: self.section)
         case .shuffleDevice:
-            return ItemListActionItem(presentationData: presentationData, title: "🎲 一键更换机型（随机）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, title: "一键更换机型（随机）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
                 arguments.shuffleDevice()
             })
         case let .fingerprintReal(checked):
@@ -108,7 +151,7 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
                 arguments.selectModel(name)
             })
         case .fingerprintFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("选择此账号对外显示的设备身份（机型、系统、版本），点击即时生效无需重启。"), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("选择此账号对外显示的设备身份（机型、系统、版本），点击即时生效无需重启。对外版本默认跟随当前客户端真实版本，与服务端功能开关保持一致。"), sectionId: self.section)
         case .proxyHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "代理出口 (SOCKS5)", sectionId: self.section)
         case let .proxyInfo(text):
@@ -121,17 +164,51 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
                     arguments.settleProxyPool()
                 }
             }, action: {})
+        case let .proxyHealthRow(_, spec, status):
+            let statusText: String
+            switch status {
+            case .unknown:
+                statusText = "未检测"
+            case .checking:
+                statusText = "检测中"
+            case .alive:
+                statusText = "正常"
+            case .dead:
+                statusText = "失联"
+            }
+            return ItemListTextItem(presentationData: presentationData, text: .plain("\(spec) — \(statusText)"), sectionId: self.section)
+        case .checkPool:
+            return ItemListActionItem(presentationData: presentationData, title: "检测代理池连通性", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
+                arguments.checkPool()
+            })
         case .shuffleProxy:
-            return ItemListActionItem(presentationData: presentationData, title: "🎲 一键更换出口 IP（轮换）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
+            return ItemListActionItem(presentationData: presentationData, title: "一键更换出口 IP（轮换）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
                 arguments.shuffleProxy()
             })
         case .proxyFooter:
-            return ItemListTextItem(presentationData: presentationData, text: .plain("住宅或移动代理可让此账号的会话位置与指纹自洽。填写多条后可一键轮换，点击即时生效；留空则跟随全局代理设置。"), sectionId: self.section)
+            return ItemListTextItem(presentationData: presentationData, text: .plain("住宅或移动代理可让此账号的会话位置与指纹自洽。轮换时会自动跳过失联出口；后台看门狗也会周期巡检，失联自动切换。留空则跟随全局代理设置。"), sectionId: self.section)
+        case .backupHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "配置备份", sectionId: self.section)
+        case .exportConfig:
+            return ItemListActionItem(presentationData: presentationData, title: "导出配置（复制到剪贴板）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
+                arguments.exportConfig()
+            })
+        case let .importInput(text):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "导入"), text: text, placeholder: "粘贴导出的配置文本", type: .regular(capitalization: false, autocorrection: false), sectionId: self.section, textUpdated: { value in
+                arguments.updateImportText(value)
+            }, updatedFocus: { _ in
+            }, action: {})
+        case .importConfig:
+            return ItemListActionItem(presentationData: presentationData, title: "导入并应用到当前账号", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
+                arguments.importConfig()
+            })
+        case .backupFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("配置包含机型指纹与代理池。换机或重装后，在目标账号的此页面粘贴导入即可恢复；导入会覆盖该账号现有配置。"), sectionId: self.section)
         }
     }
 }
 
-private func porDeviceEnvironmentEntries(presentationData: PresentationData, profile: PorDeviceProfile?) -> [PorDeviceEnvironmentEntry] {
+private func porDeviceEnvironmentEntries(presentationData: PresentationData, profile: PorDeviceProfile?, health: [String: PorProxyHealthStatus], importText: String) -> [PorDeviceEnvironmentEntry] {
     var entries: [PorDeviceEnvironmentEntry] = []
     entries.append(.fingerprintHeader)
     entries.append(.shuffleDevice)
@@ -144,19 +221,56 @@ private func porDeviceEnvironmentEntries(presentationData: PresentationData, pro
     let poolText = profile?.proxyPool?.joined(separator: ";") ?? profile?.proxySpec ?? ""
     entries.append(.proxyInfo(profile?.proxySpec ?? "未设置（跟随全局）"))
     entries.append(.proxyPoolInput(text: poolText))
+    var healthSpecs: [String] = profile?.proxyPool ?? []
+    if healthSpecs.isEmpty, let spec = profile?.proxySpec {
+        healthSpecs = [spec]
+    }
+    for (index, spec) in healthSpecs.enumerated() {
+        if index < 30 {
+            entries.append(.proxyHealthRow(index: index, spec: spec, status: health[spec] ?? .unknown))
+        }
+    }
+    entries.append(.checkPool)
     entries.append(.shuffleProxy)
     entries.append(.proxyFooter)
+    entries.append(.backupHeader)
+    entries.append(.exportConfig)
+    entries.append(.importInput(text: importText))
+    entries.append(.importConfig)
+    entries.append(.backupFooter)
     return entries
+}
+
+private func porCheckNext(_ candidates: [String], index: Int, dead: [String], completion: @escaping (String?, [String]) -> Void) {
+    if index >= candidates.count {
+        completion(nil, dead)
+        return
+    }
+    let spec = candidates[index]
+    PorProxyHealth.shared.check(spec: spec) { checkedSpec, alive in
+        PorProxyHealth.shared.record(spec: checkedSpec, status: alive ? .alive : .dead, persist: true)
+        if alive {
+            completion(spec, dead)
+        } else {
+            porCheckNext(candidates, index: index + 1, dead: dead + [checkedSpec], completion: completion)
+        }
+    }
 }
 
 public func porDeviceEnvironmentController(context: AccountContext) -> ViewController {
     let accountId = context.account.id
     
     var currentProfile = PorDeviceProfileStore.shared.profile(accountId: accountId)
+    var importText: String = ""
     
     let selectionPromise = ValuePromise<PorDeviceProfile?>(currentProfile)
+    let importTextPromise = ValuePromise<String>("")
     
     var presentUndoImpl: ((UndoOverlayContent) -> Void)?
+    
+    func showToast(_ text: String) {
+        presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: text, customUndoText: nil, timeout: 5))
+    }
     
     let bundleAppVersion: String = {
         let short = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? ""
@@ -214,11 +328,12 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 profile.proxyPool = cur.proxyPool
             }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已选 \(preset.model ?? preset.name)，已即时生效", customUndoText: nil, timeout: 5))
+            let pairingNote = profile.proxySpec != nil ? "（出口未变，请确认与常用登录环境自洽）" : ""
+            showToast("已选 \(preset.model ?? preset.name)，已即时生效\(pairingNote)")
         },
         selectRealDevice: {
             if let cur = currentProfile, cur.model == nil {
-                presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "当前已是真实设备指纹", customUndoText: nil, timeout: 5))
+                showToast("当前已是真实设备指纹")
                 return
             }
             var profile: PorDeviceProfile? = nil
@@ -226,7 +341,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 profile = PorDeviceProfile(name: "真实设备（保留代理）", model: nil, systemVersion: nil, appVersion: nil, proxySpec: cur.proxySpec, proxyPool: cur.proxyPool)
             }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已恢复真实设备指纹，已即时生效", customUndoText: nil, timeout: 5))
+            let pairingNote = (profile?.proxySpec) != nil ? "（出口未变，请确认与常用登录环境自洽）" : ""
+            showToast("已恢复真实设备指纹，已即时生效\(pairingNote)")
         },
         shuffleDevice: {
             let next = PorDeviceProfileStore.randomProfile(excludingModel: currentProfile?.model)
@@ -236,7 +352,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 profile.proxyPool = cur.proxyPool
             }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已随机更换为 \(next.model ?? next.name)，已即时生效", customUndoText: nil, timeout: 5))
+            let pairingNote = profile.proxySpec != nil ? "（出口未变，请确认与常用登录环境自洽）" : ""
+            showToast("已随机更换为 \(next.model ?? next.name)，已即时生效\(pairingNote)")
         },
         updateProxyPool: { value in
             let pool = PorDeviceProfileStore.parseProxyPool(value)
@@ -267,35 +384,126 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
         },
         shuffleProxy: {
             guard let cur = currentProfile else {
-                presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "请先填写代理池", customUndoText: nil, timeout: 5))
+                showToast("请先填写代理池")
                 return
             }
             let pool = cur.proxyPool ?? (cur.proxySpec != nil ? [cur.proxySpec!] : [])
             guard !pool.isEmpty else {
-                presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "代理池为空，请先填写代理", customUndoText: nil, timeout: 5))
+                showToast("代理池为空，请先填写代理")
                 return
             }
             guard pool.count > 1 else {
-                presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "代理池只有一条，无备选可切换", customUndoText: nil, timeout: 5))
+                let single = pool[0]
+                PorProxyHealth.shared.record(spec: single, status: .checking, persist: false)
+                PorProxyHealth.shared.check(spec: single) { spec, alive in
+                    PorProxyHealth.shared.record(spec: spec, status: alive ? .alive : .dead, persist: true)
+                    if alive {
+                        showToast("仅一条出口，当前连通正常")
+                    } else {
+                        showToast("仅一条出口，且已失联，请检查代理或补充池子")
+                    }
+                }
                 return
             }
             let currentIndex = pool.firstIndex(of: cur.proxySpec ?? "") ?? -1
-            let nextIndex = (currentIndex + 1) % pool.count
-            var profile = cur
-            profile.proxySpec = pool[nextIndex]
+            var candidates: [String] = []
+            for offset in 1..<pool.count {
+                candidates.append(pool[(currentIndex + offset) % pool.count])
+            }
+            for spec in candidates {
+                PorProxyHealth.shared.record(spec: spec, status: .checking, persist: false)
+            }
+            porCheckNext(candidates, index: 0, dead: []) { chosen, deadList in
+                guard let chosen = chosen else {
+                    showToast("代理池内出口全部失联，已保留当前：\(cur.proxySpec ?? "无")")
+                    return
+                }
+                var profile = cur
+                profile.proxySpec = chosen
+                commit(profile)
+                let skippedText = deadList.isEmpty ? "" : "（已自动跳过 \(deadList.count) 条失联出口）"
+                showToast("已切换出口：\(chosen)，已即时生效\(skippedText)")
+            }
+        },
+        checkPool: {
+            guard let profile = currentProfile else {
+                showToast("请先填写代理池")
+                return
+            }
+            var specs = profile.proxyPool ?? []
+            if specs.isEmpty, let spec = profile.proxySpec {
+                specs = [spec]
+            }
+            guard !specs.isEmpty else {
+                showToast("代理池为空，请先填写代理")
+                return
+            }
+            for spec in specs {
+                PorProxyHealth.shared.record(spec: spec, status: .checking, persist: false)
+                PorProxyHealth.shared.check(spec: spec) { checkedSpec, alive in
+                    PorProxyHealth.shared.record(spec: checkedSpec, status: alive ? .alive : .dead, persist: true)
+                }
+            }
+        },
+        exportConfig: {
+            guard let profile = currentProfile else {
+                showToast("当前没有可导出的配置")
+                return
+            }
+            let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer(id: context.account.peerId))
+            |> take(1)
+            |> deliverOnMainQueue).start(next: { peer in
+                var phone: String? = nil
+                if let peer = peer, case let .user(user) = peer {
+                    phone = user.phone
+                }
+                let payload = PorExportPayload(v: 1, phone: phone, profile: profile)
+                if let data = try? JSONEncoder().encode(payload) {
+                    let encoded = data.base64EncodedString()
+                    UIPasteboard.general.string = encoded
+                    showToast("配置已复制到剪贴板（\(encoded.count) 字符），在另一台设备的设备环境页面导入即可")
+                } else {
+                    showToast("导出失败，请重试")
+                }
+            })
+        },
+        updateImportText: { value in
+            importText = value
+            importTextPromise.set(value)
+        },
+        importConfig: {
+            let trimmed = importText.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else {
+                showToast("请先粘贴要导入的配置文本")
+                return
+            }
+            let cleaned = trimmed.components(separatedBy: .whitespacesAndNewlines).joined()
+            guard let data = Data(base64Encoded: cleaned), let payload = try? JSONDecoder().decode(PorExportPayload.self, from: data) else {
+                showToast("导入失败：配置文本格式不正确")
+                return
+            }
+            guard payload.v == 1, let profile = payload.profile else {
+                showToast("导入失败：配置内容不完整")
+                return
+            }
             commit(profile)
-            presentUndoImpl?(.universal(animation: "anim_infotip", scale: 1.0, colors: [:], title: nil, text: "已切换出口：\(pool[nextIndex])，已即时生效", customUndoText: nil, timeout: 5))
+            let fromText = payload.phone != nil ? "（来自 \(payload.phone!)）" : ""
+            showToast("已导入并应用\(fromText)，已即时生效")
+            importText = ""
+            importTextPromise.set("")
         }
     )
     
     let signal = combineLatest(queue: .mainQueue(),
         context.sharedContext.presentationData,
-        selectionPromise.get()
+        selectionPromise.get(),
+        PorProxyHealth.shared.statusesValue.get(),
+        importTextPromise.get()
     )
     |> deliverOnMainQueue
-    |> map { presentationData, profile -> (ItemListControllerState, (ItemListNodeState, Any)) in
+    |> map { presentationData, profile, health, importText -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("设备环境"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: porDeviceEnvironmentEntries(presentationData: presentationData, profile: profile), style: .blocks, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: porDeviceEnvironmentEntries(presentationData: presentationData, profile: profile, health: health, importText: importText), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
     
@@ -311,6 +519,17 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
             return false
         }), in: .current)
     }
+    
+    let accountKey = String(accountId.int64)
+    let _ = (PorProxyWatchdog.shared.rotationsValue.get()
+    |> deliverOnMainQueue).startStandalone(next: { rotations in
+        if let newSpec = rotations[accountKey] {
+            PorProxyWatchdog.shared.consumeRotation(accountId: accountId)
+            showToast("当前出口失联，看门狗已自动切换为：\(newSpec)")
+        }
+    })
+    
+    PorProxyWatchdog.shared.runCheck()
     
     return controller
 }

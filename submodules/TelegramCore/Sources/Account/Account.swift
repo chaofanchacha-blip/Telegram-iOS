@@ -1589,9 +1589,15 @@ public class Account {
             print("debugFetchAllStickers done")
         }))
         #endif*/
+        
+        // POR14: register this account with the proxy watchdog (auto-rotate dead SOCKS5 exits)
+        PorProxyWatchdog.shared.register(accountId: self.id) { [weak self] server in
+            self?.network.updateProxySettings(server)
+        }
     }
     
     deinit {
+        PorProxyWatchdog.shared.unregister(accountId: self.id)
         self.managedContactsDisposable.dispose()
         self.managedStickerPacksDisposable.dispose()
         self.managedServiceViewsDisposable.dispose()
