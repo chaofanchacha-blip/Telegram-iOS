@@ -122,7 +122,7 @@ public func setPorLowPressureFolderEnabled(account: Account, folderId: Int32, en
             } else {
                 entry.enabledFolderIds.removeAll { $0 == folderId }
             }
-            return CodableEntry(entry)
+            return PreferencesEntry(entry)
         })
     }
 }
