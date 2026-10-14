@@ -21,6 +21,8 @@ private final class PorDeviceEnvironmentControllerArguments {
     let shuffleDevice: () -> Void
     let updateProxyPool: (String) -> Void
     let settleProxyPool: () -> Void
+    let updateProxyField: (PorProxyFieldKind, String) -> Void
+    let settleProxyFields: () -> Void
     let shuffleProxy: () -> Void
     let checkPool: () -> Void
     let exportConfig: () -> Void
@@ -33,6 +35,8 @@ private final class PorDeviceEnvironmentControllerArguments {
         shuffleDevice: @escaping () -> Void,
         updateProxyPool: @escaping (String) -> Void,
         settleProxyPool: @escaping () -> Void,
+        updateProxyField: @escaping (PorProxyFieldKind, String) -> Void,
+        settleProxyFields: @escaping () -> Void,
         shuffleProxy: @escaping () -> Void,
         checkPool: @escaping () -> Void,
         exportConfig: @escaping () -> Void,
@@ -44,12 +48,21 @@ private final class PorDeviceEnvironmentControllerArguments {
         self.shuffleDevice = shuffleDevice
         self.updateProxyPool = updateProxyPool
         self.settleProxyPool = settleProxyPool
+        self.updateProxyField = updateProxyField
+        self.settleProxyFields = settleProxyFields
         self.shuffleProxy = shuffleProxy
         self.checkPool = checkPool
         self.exportConfig = exportConfig
         self.updateImportText = updateImportText
         self.importConfig = importConfig
     }
+}
+
+private enum PorProxyFieldKind {
+    case host
+    case port
+    case user
+    case pass
 }
 
 private enum PorDeviceEnvironmentSection: Int32 {
@@ -67,6 +80,10 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
     
     case proxyHeader
     case proxyInfo(String)
+    case proxyHostField(text: String)
+    case proxyPortField(text: String)
+    case proxyUserField(text: String)
+    case proxyPassField(text: String)
     case proxyPoolInput(text: String)
     case proxyHealthRow(index: Int, spec: String, status: PorProxyHealthStatus)
     case checkPool
@@ -83,7 +100,7 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
         switch self {
         case .fingerprintHeader, .shuffleDevice, .fingerprintReal, .fingerprintModel, .fingerprintFooter:
             return PorDeviceEnvironmentSection.fingerprint.rawValue
-        case .proxyHeader, .proxyInfo, .proxyPoolInput, .proxyHealthRow, .checkPool, .shuffleProxy, .proxyFooter:
+        case .proxyHeader, .proxyInfo, .proxyHostField, .proxyPortField, .proxyUserField, .proxyPassField, .proxyPoolInput, .proxyHealthRow, .checkPool, .shuffleProxy, .proxyFooter:
             return PorDeviceEnvironmentSection.proxy.rawValue
         case .backupHeader, .exportConfig, .importInput, .importConfig, .backupFooter:
             return PorDeviceEnvironmentSection.backup.rawValue
@@ -106,8 +123,16 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
             return 201
         case .proxyInfo:
             return 202
-        case .proxyPoolInput:
+        case .proxyHostField:
             return 203
+        case .proxyPortField:
+            return 204
+        case .proxyUserField:
+            return 205
+        case .proxyPassField:
+            return 206
+        case .proxyPoolInput:
+            return 207
         case let .proxyHealthRow(index, _, _):
             return 210 + Int32(index)
         case .checkPool:
@@ -156,8 +181,40 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "代理出口 (SOCKS5)", sectionId: self.section)
         case let .proxyInfo(text):
             return ItemListTextItem(presentationData: presentationData, text: .plain("当前出口：\(text)"), sectionId: self.section)
+        case let .proxyHostField(text):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "地址"), text: text, placeholder: "SOCKS5 服务器 IP 或域名", type: .regular(capitalization: false, autocorrection: false), returnKeyType: .next, sectionId: self.section, textUpdated: { value in
+                arguments.updateProxyField(.host, value)
+            }, updatedFocus: { focused in
+                if !focused {
+                    arguments.settleProxyFields()
+                }
+            }, action: {})
+        case let .proxyPortField(text):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "端口"), text: text, placeholder: "1-65535", type: .number, sectionId: self.section, textUpdated: { value in
+                arguments.updateProxyField(.port, value)
+            }, updatedFocus: { focused in
+                if !focused {
+                    arguments.settleProxyFields()
+                }
+            }, action: {})
+        case let .proxyUserField(text):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "账号"), text: text, placeholder: "可为空", type: .regular(capitalization: false, autocorrection: false), returnKeyType: .next, sectionId: self.section, textUpdated: { value in
+                arguments.updateProxyField(.user, value)
+            }, updatedFocus: { focused in
+                if !focused {
+                    arguments.settleProxyFields()
+                }
+            }, action: {})
+        case let .proxyPassField(text):
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "密码"), text: text, placeholder: "可为空", type: .password, sectionId: self.section, textUpdated: { value in
+                arguments.updateProxyField(.pass, value)
+            }, updatedFocus: { focused in
+                if !focused {
+                    arguments.settleProxyFields()
+                }
+            }, action: {})
         case let .proxyPoolInput(text):
-            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "代理池"), text: text, placeholder: "host:port:用户:密码，多条用 ; 分隔", type: .regular(capitalization: false, autocorrection: false), sectionId: self.section, textUpdated: { value in
+            return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "代理池(批量)"), text: text, placeholder: "批量出口 host:port:用户:密码，分号分隔（可选，轮换用）", type: .regular(capitalization: false, autocorrection: false), sectionId: self.section, textUpdated: { value in
                 arguments.updateProxyPool(value)
             }, updatedFocus: { focused in
                 if !focused {
@@ -208,7 +265,7 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
     }
 }
 
-private func porDeviceEnvironmentEntries(presentationData: PresentationData, profile: PorDeviceProfile?, health: [String: PorProxyHealthStatus], importText: String) -> [PorDeviceEnvironmentEntry] {
+private func porDeviceEnvironmentEntries(presentationData: PresentationData, profile: PorDeviceProfile?, health: [String: PorProxyHealthStatus], importText: String, draftHost: String, draftPort: String, draftUser: String, draftPass: String) -> [PorDeviceEnvironmentEntry] {
     var entries: [PorDeviceEnvironmentEntry] = []
     entries.append(.fingerprintHeader)
     entries.append(.shuffleDevice)
@@ -220,6 +277,10 @@ private func porDeviceEnvironmentEntries(presentationData: PresentationData, pro
     entries.append(.proxyHeader)
     let poolText = profile?.proxyPool?.joined(separator: ";") ?? profile?.proxySpec ?? ""
     entries.append(.proxyInfo(profile?.proxySpec ?? "未设置（跟随全局）"))
+    entries.append(.proxyHostField(text: draftHost))
+    entries.append(.proxyPortField(text: draftPort))
+    entries.append(.proxyUserField(text: draftUser))
+    entries.append(.proxyPassField(text: draftPass))
     entries.append(.proxyPoolInput(text: poolText))
     var healthSpecs: [String] = profile?.proxyPool ?? []
     if healthSpecs.isEmpty, let spec = profile?.proxySpec {
@@ -262,6 +323,25 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
     
     var currentProfile = PorDeviceProfileStore.shared.profile(accountId: accountId)
     var importText: String = ""
+    
+    var proxyDraftHost: String = ""
+    var proxyDraftPort: String = ""
+    var proxyDraftUser: String = ""
+    var proxyDraftPass: String = ""
+    func syncProxyDraftsFromProfile() {
+        guard let spec = currentProfile?.proxySpec, !spec.isEmpty else {
+            return
+        }
+        let parts = spec.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+        guard parts.count >= 2 else {
+            return
+        }
+        proxyDraftHost = parts[0]
+        proxyDraftPort = parts[1]
+        proxyDraftUser = parts.count > 2 ? parts[2] : ""
+        proxyDraftPass = parts.count > 3 ? parts[3] : ""
+    }
+    syncProxyDraftsFromProfile()
     
     let selectionPromise = ValuePromise<PorDeviceProfile?>(currentProfile)
     let importTextPromise = ValuePromise<String>("")
@@ -379,8 +459,59 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 PorDeviceProfileStore.shared.setProfile(profile, accountId: accountId)
                 selectionPromise.set(profile)
                 applyProxyLive()
+                syncProxyDraftsFromProfile()
             }
         }
+    let updateProxyFieldImpl: (PorProxyFieldKind, String) -> Void = { kind, value in
+        switch kind {
+        case .host:
+            proxyDraftHost = value
+        case .port:
+            proxyDraftPort = value
+        case .user:
+            proxyDraftUser = value
+        case .pass:
+            proxyDraftPass = value
+        }
+    }
+    let settleProxyFieldsImpl: () -> Void = {
+        let host = proxyDraftHost.trimmingCharacters(in: .whitespacesAndNewlines)
+        let portText = proxyDraftPort.trimmingCharacters(in: .whitespacesAndNewlines)
+        let user = proxyDraftUser.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pass = proxyDraftPass.trimmingCharacters(in: .whitespacesAndNewlines)
+        if host.isEmpty && portText.isEmpty && user.isEmpty && pass.isEmpty {
+            if let cur = currentProfile, cur.proxySpec != nil {
+                var profile = cur
+                profile.proxySpec = nil
+                commit(profile)
+                showToast("已清除出口，改为跟随全局代理设置")
+            }
+            return
+        }
+        guard !host.isEmpty, let port = Int32(portText), port > 0, port < 65536 else {
+            showToast("格式有误：地址必填，端口需为 1-65535")
+            return
+        }
+        var spec = "\(host):\(port)"
+        if !user.isEmpty {
+            spec += ":\(user)"
+            if !pass.isEmpty {
+                spec += ":\(pass)"
+            }
+        }
+        var profile = currentProfile ?? PorDeviceProfile(name: "自定义", model: nil, systemVersion: nil, appVersion: nil, proxySpec: nil)
+        if profile.proxySpec == spec, let pool = profile.proxyPool, pool.contains(spec) {
+            return
+        }
+        profile.proxySpec = spec
+        var pool = profile.proxyPool ?? []
+        if !pool.contains(spec) {
+            pool.insert(spec, at: 0)
+        }
+        profile.proxyPool = pool.isEmpty ? nil : pool
+        commit(profile)
+        showToast("出口已更新并即时生效：\(spec)")
+    }
     let shuffleProxyImpl: () -> Void = {
             guard let cur = currentProfile else {
                 showToast("请先填写代理池")
@@ -420,6 +551,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 var profile = cur
                 profile.proxySpec = chosen
                 commit(profile)
+                syncProxyDraftsFromProfile()
                 let skippedText = deadList.isEmpty ? "" : "（已自动跳过 \(deadList.count) 条失联出口）"
                 showToast("已切换出口：\(chosen)，已即时生效\(skippedText)")
             }
@@ -487,6 +619,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 return
             }
             commit(profile)
+            syncProxyDraftsFromProfile()
             let fromText = payload.phone != nil ? "（来自 \(payload.phone!)）" : ""
             showToast("已导入并应用\(fromText)，已即时生效")
             importText = ""
@@ -499,6 +632,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
         shuffleDevice: shuffleDeviceImpl,
         updateProxyPool: updateProxyPoolImpl,
         settleProxyPool: settleProxyPoolImpl,
+        updateProxyField: updateProxyFieldImpl,
+        settleProxyFields: settleProxyFieldsImpl,
         shuffleProxy: shuffleProxyImpl,
         checkPool: checkPoolImpl,
         exportConfig: exportConfigImpl,
@@ -515,12 +650,16 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
     |> deliverOnMainQueue
     |> map { presentationData, profile, health, importText -> (ItemListControllerState, (ItemListNodeState, Any)) in
         let controllerState = ItemListControllerState(presentationData: ItemListPresentationData(presentationData), title: .text("设备环境"), leftNavigationButton: nil, rightNavigationButton: nil, backNavigationButton: ItemListBackButton(title: presentationData.strings.Common_Back))
-        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: porDeviceEnvironmentEntries(presentationData: presentationData, profile: profile, health: health, importText: importText), style: .blocks, animateChanges: false)
+        let listState = ItemListNodeState(presentationData: ItemListPresentationData(presentationData), entries: porDeviceEnvironmentEntries(presentationData: presentationData, profile: profile, health: health, importText: importText, draftHost: proxyDraftHost, draftPort: proxyDraftPort, draftUser: proxyDraftUser, draftPass: proxyDraftPass), style: .blocks, animateChanges: false)
         return (controllerState, (listState, arguments))
     }
     
     let controller = ItemListController(context: context, state: signal)
     controller.navigationPresentation = .modal
+    
+    let porDismissKeyboardTap = UITapGestureRecognizer(target: controller.view, action: #selector(UIView.endEditing(_:)))
+    porDismissKeyboardTap.cancelsTouchesInView = false
+    controller.view.addGestureRecognizer(porDismissKeyboardTap)
     
     presentUndoImpl = { [weak controller] content in
         guard let controller else {

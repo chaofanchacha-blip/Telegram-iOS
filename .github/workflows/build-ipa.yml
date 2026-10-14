@@ -49,8 +49,15 @@ jobs:
       - name: Configure Bazel remote cache (persistent, on our own VPS)
         if: env.POR_BAZEL_REMOTE != ''
         run: |
-          echo "build --remote_cache=$POR_BAZEL_REMOTE" >> .bazelrc
-          echo "build --remote_upload_local_results=true" >> .bazelrc
+          CACHE_HOST=$(echo "$POR_BAZEL_REMOTE" | sed -E 's#.*@([^/:]+):([0-9]+).*#\1#')
+          CACHE_PORT=$(echo "$POR_BAZEL_REMOTE" | sed -E 's#.*@([^/:]+):([0-9]+).*#\2#')
+          if nc -z -w 5 "$CACHE_HOST" "$CACHE_PORT" 2>/dev/null; then
+            echo "BR cache reachable at $CACHE_HOST:$CACHE_PORT, enabling remote cache"
+            echo "build --remote_cache=$POR_BAZEL_REMOTE" >> .bazelrc
+            echo "build --remote_upload_local_results=true" >> .bazelrc
+          else
+            echo "BR cache unreachable at $CACHE_HOST:$CACHE_PORT, skipping remote cache (GHA cache fallback)"
+          fi
         env:
           POR_BAZEL_REMOTE: ${{ secrets.POR_BAZEL_REMOTE }}
 
