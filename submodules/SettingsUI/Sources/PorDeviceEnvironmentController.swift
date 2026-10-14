@@ -449,9 +449,10 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 showToast("当前没有可导出的配置")
                 return
             }
-            let _ = (context.engine.data.get(TelegramEngine.EngineData.Item.Peer(id: context.account.peerId))
+            let peerSignal: Signal<EnginePeer?, NoError> = context.engine.data.get(TelegramEngine.EngineData.Item.Peer(id: context.account.peerId))
             |> take(1)
-            |> deliverOnMainQueue).start(next: { peer in
+            |> deliverOnMainQueue
+            let _ = peerSignal.start(next: { peer in
                 var phone: String? = nil
                 if let peer = peer, case let .user(user) = peer {
                     phone = user.phone
