@@ -317,8 +317,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
         applyProxyLive()
     }
     
-    let arguments = PorDeviceEnvironmentControllerArguments(
-        selectModel: { name in
+    let selectModelImpl: (String) -> Void = { name in
             guard let preset = PorDeviceProfileStore.catalog.first(where: { $0.name == name }) else {
                 return
             }
@@ -330,8 +329,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
             commit(profile)
             let pairingNote = profile.proxySpec != nil ? "（出口未变，请确认与常用登录环境自洽）" : ""
             showToast("已选 \(preset.model ?? preset.name)，已即时生效\(pairingNote)")
-        },
-        selectRealDevice: {
+        }
+    let selectRealDeviceImpl: () -> Void = {
             if let cur = currentProfile, cur.model == nil {
                 showToast("当前已是真实设备指纹")
                 return
@@ -343,8 +342,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
             commit(profile)
             let pairingNote = (profile?.proxySpec) != nil ? "（出口未变，请确认与常用登录环境自洽）" : ""
             showToast("已恢复真实设备指纹，已即时生效\(pairingNote)")
-        },
-        shuffleDevice: {
+        }
+    let shuffleDeviceImpl: () -> Void = {
             let next = PorDeviceProfileStore.randomProfile(excludingModel: currentProfile?.model)
             var profile = next
             if let cur = currentProfile {
@@ -354,15 +353,15 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
             commit(profile)
             let pairingNote = profile.proxySpec != nil ? "（出口未变，请确认与常用登录环境自洽）" : ""
             showToast("已随机更换为 \(next.model ?? next.name)，已即时生效\(pairingNote)")
-        },
-        updateProxyPool: { value in
+        }
+    let updateProxyPoolImpl: (String) -> Void = { value in
             let pool = PorDeviceProfileStore.parseProxyPool(value)
             var profile = currentProfile ?? PorDeviceProfile(name: "自定义", model: nil, systemVersion: nil, appVersion: nil, proxySpec: nil)
             profile.proxyPool = pool.isEmpty ? nil : pool
             currentProfile = profile
             PorDeviceProfileStore.shared.setProfile(profile, accountId: accountId)
-        },
-        settleProxyPool: {
+        }
+    let settleProxyPoolImpl: () -> Void = {
             guard var profile = currentProfile else {
                 return
             }
@@ -381,8 +380,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 selectionPromise.set(profile)
                 applyProxyLive()
             }
-        },
-        shuffleProxy: {
+        }
+    let shuffleProxyImpl: () -> Void = {
             guard let cur = currentProfile else {
                 showToast("请先填写代理池")
                 return
@@ -424,8 +423,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 let skippedText = deadList.isEmpty ? "" : "（已自动跳过 \(deadList.count) 条失联出口）"
                 showToast("已切换出口：\(chosen)，已即时生效\(skippedText)")
             }
-        },
-        checkPool: {
+        }
+    let checkPoolImpl: () -> Void = {
             guard let profile = currentProfile else {
                 showToast("请先填写代理池")
                 return
@@ -444,8 +443,8 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                     PorProxyHealth.shared.record(spec: checkedSpec, status: alive ? .alive : .dead, persist: true)
                 }
             }
-        },
-        exportConfig: {
+        }
+    let exportConfigImpl: () -> Void = {
             guard let profile = currentProfile else {
                 showToast("当前没有可导出的配置")
                 return
@@ -466,12 +465,12 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                     showToast("导出失败，请重试")
                 }
             })
-        },
-        updateImportText: { value in
+        }
+    let updateImportTextImpl: (String) -> Void = { value in
             importText = value
             importTextPromise.set(value)
-        },
-        importConfig: {
+        }
+    let importConfigImpl: () -> Void = {
             let trimmed = importText.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !trimmed.isEmpty else {
                 showToast("请先粘贴要导入的配置文本")
@@ -492,6 +491,18 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
             importText = ""
             importTextPromise.set("")
         }
+
+    let arguments = PorDeviceEnvironmentControllerArguments(
+        selectModel: selectModelImpl,
+        selectRealDevice: selectRealDeviceImpl,
+        shuffleDevice: shuffleDeviceImpl,
+        updateProxyPool: updateProxyPoolImpl,
+        settleProxyPool: settleProxyPoolImpl,
+        shuffleProxy: shuffleProxyImpl,
+        checkPool: checkPoolImpl,
+        exportConfig: exportConfigImpl,
+        updateImportText: updateImportTextImpl,
+        importConfig: importConfigImpl
     )
     
     let signal = combineLatest(queue: .mainQueue(),
