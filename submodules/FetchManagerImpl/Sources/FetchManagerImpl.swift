@@ -693,6 +693,9 @@ public final class FetchManagerImpl: FetchManager {
     private var nextEpisodeId: Int32 = 0
     private var nextUserInitiatedIndex: Int32 = 0
     
+    // POR18: low-pressure folder state, blocks automatic media fetches for flagged folders
+    private let lowPressureState: PorLowPressureState?
+    
     private var categoryContexts: [FetchManagerCategory: FetchManagerCategoryContext] = [:]
     
     private let hasUserInitiatedEntriesValue = ValuePromise<Bool>(false, ignoreRepeated: true)
@@ -705,9 +708,10 @@ public final class FetchManagerImpl: FetchManager {
         return self.entriesSummaryValue.get()
     }
     
-    public init(postbox: Postbox, storeManager: DownloadedMediaStoreManager?) {
+    public init(postbox: Postbox, storeManager: DownloadedMediaStoreManager?, lowPressureState: PorLowPressureState? = nil) {
         self.postbox = postbox
         self.storeManager = storeManager
+        self.lowPressureState = lowPressureState
     }
     
     private func takeNextEpisodeId() -> Int32 {
@@ -776,6 +780,12 @@ public final class FetchManagerImpl: FetchManager {
         let queue = self.queue
         return Signal { [weak self] subscriber in
             if let strongSelf = self {
+                // POR18: 减压文件夹 - block automatic media fetches for low-pressure peers.
+                // User-initiated fetches (manual taps) always go through.
+                if !userInitiated, case let .chat(peerId) = location, peerId != PeerId(0), let lowPressureState = strongSelf.lowPressureState, lowPressureState.isLowPressure(peerId: peerId) {
+                    subscriber.putCompletion()
+                    return ActionDisposable { }
+                }
                 var assignedEpisode: Int32?
                 var assignedUserInitiatedIndex: Int32?
                 let _ = assignedUserInitiatedIndex

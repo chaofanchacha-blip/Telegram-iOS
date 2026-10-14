@@ -1227,6 +1227,10 @@ public class Account {
     private let managedServiceViewsDisposable = MetaDisposable()
     private let managedServiceViewsActionDisposable = MetaDisposable()
     private let managedOperationsDisposable = DisposableSet()
+    
+    // POR18: 减压文件夹 state (blocks automatic media fetches for low-pressure folders)
+    public private(set) var porLowPressureState: PorLowPressureState!
+    private var porLowPressureDisposable: Disposable?
     private var storageSettingsDisposable: Disposable?
     private var automaticCacheEvictionContext: AutomaticCacheEvictionContext?
     
@@ -1594,10 +1598,16 @@ public class Account {
         PorProxyWatchdog.shared.register(accountId: self.id) { [weak self] server in
             self?.network.updateProxySettings(server)
         }
+        
+        // POR18: start the low-pressure folder watcher
+        let (porLowPressureStateValue, porLowPressureDisposableValue) = startPorLowPressureState(postbox: postbox)
+        self.porLowPressureState = porLowPressureStateValue
+        self.porLowPressureDisposable = porLowPressureDisposableValue
     }
     
     deinit {
         PorProxyWatchdog.shared.unregister(accountId: self.id)
+        self.porLowPressureDisposable?.dispose()
         self.managedContactsDisposable.dispose()
         self.managedStickerPacksDisposable.dispose()
         self.managedServiceViewsDisposable.dispose()

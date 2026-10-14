@@ -54,6 +54,7 @@ private final class ChatListFilterPresetControllerArguments {
     let peerContextAction: (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void
     let updateTagColor: (PeerNameColor?) -> Void
     let openTagColorPremium: () -> Void
+    let toggleLowPressure: (Bool) -> Void
     
     init(
         context: AccountContext,
@@ -77,7 +78,8 @@ private final class ChatListFilterPresetControllerArguments {
         linkContextAction: @escaping (ExportedChatFolderLink?, ASDisplayNode, ContextGesture?) -> Void,
         peerContextAction: @escaping (EnginePeer, ASDisplayNode, ContextGesture?, CGPoint?) -> Void,
         updateTagColor: @escaping (PeerNameColor?) -> Void,
-        openTagColorPremium: @escaping () -> Void
+        openTagColorPremium: @escaping () -> Void,
+        toggleLowPressure: @escaping (Bool) -> Void
     ) {
         self.context = context
         self.updateState = updateState
@@ -101,6 +103,7 @@ private final class ChatListFilterPresetControllerArguments {
         self.peerContextAction = peerContextAction
         self.updateTagColor = updateTagColor
         self.openTagColorPremium = openTagColorPremium
+        self.toggleLowPressure = toggleLowPressure
     }
 }
 
@@ -111,6 +114,7 @@ private enum ChatListFilterPresetControllerSection: Int32 {
     case excludePeers
     case inviteLinks
     case tagColor
+    case lowPressure
 }
 
 private enum ChatListFilterPresetEntryStableId: Hashable {
@@ -126,6 +130,9 @@ private enum ChatListFilterPresetEntryStableId: Hashable {
     case tagColorHeader
     case tagColor
     case tagColorFooter
+    case lowPressureHeader
+    case lowPressure
+    case lowPressureFooter
 }
 
 private struct ChatListFilterPresetEntrySortId: Comparable {
@@ -252,6 +259,9 @@ private enum ChatListFilterPresetEntry: ItemListNodeEntry {
     case tagColorHeader(name: ChatFolderTitle, color: PeerNameColors.Colors?, isPremium: Bool)
     case tagColor(colors: PeerNameColors, currentColor: PeerNameColor?, isPremium: Bool)
     case tagColorFooter
+    case lowPressureHeader
+    case lowPressure(value: Bool)
+    case lowPressureFooter
     
     var section: ItemListSectionId {
         switch self {
@@ -267,6 +277,8 @@ private enum ChatListFilterPresetEntry: ItemListNodeEntry {
             return ChatListFilterPresetControllerSection.inviteLinks.rawValue
         case .tagColorHeader, .tagColor, .tagColorFooter:
             return ChatListFilterPresetControllerSection.tagColor.rawValue
+        case .lowPressureHeader, .lowPressure, .lowPressureFooter:
+            return ChatListFilterPresetControllerSection.lowPressure.rawValue
         }
     }
     
@@ -316,6 +328,12 @@ private enum ChatListFilterPresetEntry: ItemListNodeEntry {
             return .index(15)
         case .tagColorFooter:
             return .index(16)
+        case .lowPressureHeader:
+            return .index(17)
+        case .lowPressure:
+            return .index(18)
+        case .lowPressureFooter:
+            return .index(19)
         }
     }
     
@@ -365,6 +383,12 @@ private enum ChatListFilterPresetEntry: ItemListNodeEntry {
             return ChatListFilterPresetEntrySortId(section: 12, index: index)
         case .inviteLinkInfo:
             return ChatListFilterPresetEntrySortId(section: 13, index: 0)
+        case .lowPressureHeader:
+            return ChatListFilterPresetEntrySortId(section: 9, index: 1)
+        case .lowPressure:
+            return ChatListFilterPresetEntrySortId(section: 9, index: 2)
+        case .lowPressureFooter:
+            return ChatListFilterPresetEntrySortId(section: 9, index: 3)
         }
     }
     
@@ -407,6 +431,14 @@ private enum ChatListFilterPresetEntry: ItemListNodeEntry {
             return ItemListSectionHeaderItem(presentationData: presentationData, text: text, sectionId: self.section)
         case .includePeerInfo(let text), .excludePeerInfo(let text):
             return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case .lowPressureHeader:
+            return ItemListSectionHeaderItem(presentationData: presentationData, text: "减压模式", sectionId: self.section)
+        case let .lowPressure(value):
+            return ItemListSwitchItem(presentationData: presentationData, systemStyle: .glass, title: "禁止自动加载媒体", value: value, enableInteractiveChanges: true, sectionId: self.section, style: .blocks, updated: { updatedValue in
+                arguments.toggleLowPressure(updatedValue)
+            })
+        case .lowPressureFooter:
+            return ItemListTextItem(presentationData: presentationData, text: .plain("此文件夹内的会话不会自动下载或预加载图片、视频、语音和文件，节省流量和内存。点开媒体时手动加载。"), sectionId: self.section)
         case let .addIncludePeer(title):
             return ItemListPeerActionItem(presentationData: presentationData, systemStyle: .glass, icon: PresentationResourcesItemList.plusIconImage(presentationData.theme), title: title, alwaysPlain: false, sectionId: self.section, height: .peerList, editing: false, action: {
                 arguments.openAddIncludePeer()
@@ -560,6 +592,7 @@ private struct ChatListFilterPresetControllerState: Equatable {
     var excludeArchived: Bool
     var additionallyIncludePeers: [EnginePeer.Id]
     var additionallyExcludePeers: [EnginePeer.Id]
+    var lowPressure: Bool
     
     var revealedItemId: ChatListFilterRevealedItemId?
     var expandedSections: Set<FilterSection>
@@ -671,6 +704,11 @@ private func chatListFilterPresetControllerEntries(context: AccountContext, pres
         
         entries.append(.excludePeerInfo(presentationData.strings.ChatListFolder_ExcludeSectionInfo))
     }
+    
+    // POR18: 减压模式 section
+    entries.append(.lowPressureHeader)
+    entries.append(.lowPressure(value: state.lowPressure))
+    entries.append(.lowPressureFooter)
     
     let tagColor: PeerNameColor?
     if state.colorUpdated {
@@ -1407,6 +1445,7 @@ public func chatListFilterPresetController(context: AccountContext, currentPrese
         excludeArchived: initialPreset?.data?.excludeArchived ?? false,
         additionallyIncludePeers: initialPreset?.data?.includePeers.peers ?? [],
         additionallyExcludePeers: initialPreset?.data?.excludePeers ?? [],
+        lowPressure: initialPreset != nil ? context.account.porLowPressureState.isEnabled(folderId: initialPreset!.id) : false,
         expandedSections: []
     )
     initialState.colorUpdated = true
@@ -1991,6 +2030,13 @@ public func chatListFilterPresetController(context: AccountContext, currentPrese
                 controller?.replace(with: c)
             }
             pushControllerImpl?(controller)
+        },
+        toggleLowPressure: { value in
+            updateState { state in
+                var state = state
+                state.lowPressure = value
+                return state
+            }
         }
     )
         
@@ -2039,6 +2085,16 @@ public func chatListFilterPresetController(context: AccountContext, currentPrese
                 return filters
             }
             |> deliverOnMainQueue).start(next: { filters in
+                // POR18: persist the low-pressure (减压模式) flag for this folder
+                let porTargetId: Int32
+                if let currentPresetId = currentPreset?.id {
+                    porTargetId = currentPresetId
+                } else {
+                    porTargetId = filters.last?.id ?? -1
+                }
+                if porTargetId != -1 {
+                    let _ = setPorLowPressureFolderEnabled(account: context.account, folderId: porTargetId, enabled: state.lowPressure).start()
+                }
                 updated(filters)
                 
                 if waitForSync {

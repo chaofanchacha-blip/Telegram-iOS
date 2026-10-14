@@ -336,7 +336,7 @@ public final class AccountContextImpl: AccountContext {
         } else {
             self.liveLocationManager = nil
         }
-        self.fetchManager = FetchManagerImpl(postbox: account.postbox, storeManager: self.downloadedMediaStoreManager)
+        self.fetchManager = FetchManagerImpl(postbox: account.postbox, storeManager: self.downloadedMediaStoreManager, lowPressureState: account.porLowPressureState)
         if sharedContext.applicationBindings.isMainApp && !temp {
             self.prefetchManager = PrefetchManagerImpl(sharedContext: sharedContext, account: account, engine: self.engine, fetchManager: self.fetchManager)
             self.wallpaperUploadManager = WallpaperUploadManagerImpl(sharedContext: sharedContext, account: account, presentationData: sharedContext.presentationData)
