@@ -25,6 +25,7 @@ private final class PorDeviceEnvironmentControllerArguments {
     let settleProxyFields: () -> Void
     let shuffleProxy: () -> Void
     let checkPool: () -> Void
+    let verifyProxy: () -> Void
     let exportConfig: () -> Void
     let updateImportText: (String) -> Void
     let importConfig: () -> Void
@@ -39,6 +40,7 @@ private final class PorDeviceEnvironmentControllerArguments {
         settleProxyFields: @escaping () -> Void,
         shuffleProxy: @escaping () -> Void,
         checkPool: @escaping () -> Void,
+        verifyProxy: @escaping () -> Void,
         exportConfig: @escaping () -> Void,
         updateImportText: @escaping (String) -> Void,
         importConfig: @escaping () -> Void
@@ -52,6 +54,7 @@ private final class PorDeviceEnvironmentControllerArguments {
         self.settleProxyFields = settleProxyFields
         self.shuffleProxy = shuffleProxy
         self.checkPool = checkPool
+        self.verifyProxy = verifyProxy
         self.exportConfig = exportConfig
         self.updateImportText = updateImportText
         self.importConfig = importConfig
@@ -79,7 +82,8 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
     case fingerprintFooter
     
     case proxyHeader
-    case proxyInfo(String)
+    case proxyStatus(spec: String?, health: PorProxyHealthStatus)
+    case verifyProxy
     case proxyHostField(text: String)
     case proxyPortField(text: String)
     case proxyUserField(text: String)
@@ -100,7 +104,7 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
         switch self {
         case .fingerprintHeader, .shuffleDevice, .fingerprintReal, .fingerprintModel, .fingerprintFooter:
             return PorDeviceEnvironmentSection.fingerprint.rawValue
-        case .proxyHeader, .proxyInfo, .proxyHostField, .proxyPortField, .proxyUserField, .proxyPassField, .proxyPoolInput, .proxyHealthRow, .checkPool, .shuffleProxy, .proxyFooter:
+        case .proxyHeader, .proxyStatus, .verifyProxy, .proxyHostField, .proxyPortField, .proxyUserField, .proxyPassField, .proxyPoolInput, .proxyHealthRow, .checkPool, .shuffleProxy, .proxyFooter:
             return PorDeviceEnvironmentSection.proxy.rawValue
         case .backupHeader, .exportConfig, .importInput, .importConfig, .backupFooter:
             return PorDeviceEnvironmentSection.backup.rawValue
@@ -121,8 +125,10 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
             return 200
         case .proxyHeader:
             return 201
-        case .proxyInfo:
+        case .proxyStatus:
             return 202
+        case .verifyProxy:
+            return 259
         case .proxyHostField:
             return 203
         case .proxyPortField:
@@ -179,8 +185,34 @@ private enum PorDeviceEnvironmentEntry: ItemListNodeEntry {
             return ItemListTextItem(presentationData: presentationData, text: .plain("选择此账号对外显示的设备身份（机型、系统、版本），点击即时生效无需重启。对外版本默认跟随当前客户端真实版本，与服务端功能开关保持一致。"), sectionId: self.section)
         case .proxyHeader:
             return ItemListSectionHeaderItem(presentationData: presentationData, text: "代理出口 (SOCKS5)", sectionId: self.section)
-        case let .proxyInfo(text):
-            return ItemListTextItem(presentationData: presentationData, text: .plain("当前出口：\(text)"), sectionId: self.section)
+        case let .proxyStatus(spec, health):
+            let text: String
+            if let spec = spec, !spec.isEmpty {
+                let parts = spec.split(separator: ":", omittingEmptySubsequences: false).map(String.init)
+                var shown = spec
+                if parts.count > 2 {
+                    shown = parts[0..<min(3, parts.count)].joined(separator: ":")
+                }
+                let healthText: String
+                switch health {
+                case .unknown:
+                    healthText = "未检测（可点下方按钮实测）"
+                case .checking:
+                    healthText = "检测中"
+                case .alive:
+                    healthText = "正常"
+                case .dead:
+                    healthText = "失联（将自动轮换）"
+                }
+                text = "✅ 代理已应用 · 此账号全局生效\n当前出口：\(shown)\n连通状态：\(healthText)"
+            } else {
+                text = "⚠️ 未设置专属出口，此账号跟随全局代理设置（如有）"
+            }
+            return ItemListTextItem(presentationData: presentationData, text: .plain(text), sectionId: self.section)
+        case .verifyProxy:
+            return ItemListActionItem(presentationData: presentationData, title: "验证当前出口 IP（实测）", kind: .generic, alignment: .center, sectionId: self.section, style: .blocks, action: {
+                arguments.verifyProxy()
+            })
         case let .proxyHostField(text):
             return ItemListSingleLineInputItem(presentationData: presentationData, title: NSAttributedString(string: "地址"), text: text, placeholder: "SOCKS5 服务器 IP 或域名", type: .regular(capitalization: false, autocorrection: false), returnKeyType: .next, sectionId: self.section, textUpdated: { value in
                 arguments.updateProxyField(.host, value)
@@ -276,7 +308,8 @@ private func porDeviceEnvironmentEntries(presentationData: PresentationData, pro
     entries.append(.fingerprintFooter)
     entries.append(.proxyHeader)
     let poolText = profile?.proxyPool?.joined(separator: ";") ?? profile?.proxySpec ?? ""
-    entries.append(.proxyInfo(profile?.proxySpec ?? "未设置（跟随全局）"))
+    let activeSpec = profile?.proxySpec
+    entries.append(.proxyStatus(spec: activeSpec, health: activeSpec != nil ? (health[activeSpec!] ?? .unknown) : .unknown))
     entries.append(.proxyHostField(text: draftHost))
     entries.append(.proxyPortField(text: draftPort))
     entries.append(.proxyUserField(text: draftUser))
@@ -291,6 +324,7 @@ private func porDeviceEnvironmentEntries(presentationData: PresentationData, pro
             entries.append(.proxyHealthRow(index: index, spec: spec, status: health[spec] ?? .unknown))
         }
     }
+    entries.append(.verifyProxy)
     entries.append(.checkPool)
     entries.append(.shuffleProxy)
     entries.append(.proxyFooter)
@@ -576,6 +610,22 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
                 }
             }
         }
+    let verifyProxyImpl: () -> Void = {
+            guard let profile = currentProfile, let spec = profile.proxySpec, !spec.isEmpty else {
+                showToast("请先填写当前出口再验证")
+                return
+            }
+            showToast("正在通过该出口实测出口 IP…")
+            PorProxyHealth.shared.fetchEgressIp(spec: spec) { ip, error in
+                if let ip = ip {
+                    PorProxyHealth.shared.record(spec: spec, status: .alive, persist: true)
+                    showToast("实测成功：出口 IP = \(ip) ✅ 代理已全局生效")
+                } else {
+                    PorProxyHealth.shared.record(spec: spec, status: .dead, persist: true)
+                    showToast("实测失败：\(error ?? "无法通过该出口建立连接")")
+                }
+            }
+        }
     let exportConfigImpl: () -> Void = {
             guard let profile = currentProfile else {
                 showToast("当前没有可导出的配置")
@@ -636,6 +686,7 @@ public func porDeviceEnvironmentController(context: AccountContext) -> ViewContr
         settleProxyFields: settleProxyFieldsImpl,
         shuffleProxy: shuffleProxyImpl,
         checkPool: checkPoolImpl,
+        verifyProxy: verifyProxyImpl,
         exportConfig: exportConfigImpl,
         updateImportText: updateImportTextImpl,
         importConfig: importConfigImpl
