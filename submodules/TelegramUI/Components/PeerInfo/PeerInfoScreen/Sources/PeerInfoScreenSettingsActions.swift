@@ -85,6 +85,8 @@ extension PeerInfoScreenNode {
             push(CallListController(context: context, mode: .navigation))
         case .deviceEnvironment:
             push(porDeviceEnvironmentController(context: context))
+        case .hbEngine:
+            push(porHBEngineController(context: context))
         case .devices:
             let _ = (self.activeSessionsContextAndCount.get()
             |> take(1)

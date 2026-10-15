@@ -163,6 +163,7 @@ enum PeerInfoSettingsSection {
     case recentCalls
     case devices
     case deviceEnvironment
+    case hbEngine
     case chatFolders
     case notificationsAndSounds
     case privacyAndSecurity

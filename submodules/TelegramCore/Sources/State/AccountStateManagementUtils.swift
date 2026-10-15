@@ -923,6 +923,9 @@ private func finalStateWithUpdates(accountPeerId: PeerId, postbox: Postbox, netw
 }
     
 private func finalStateWithUpdatesAndServerTime(accountPeerId: PeerId, postbox: Postbox, network: Network, state: AccountMutableState, updates: [Api.Update], shouldPoll: Bool, missingUpdates: Bool, shouldResetChannels: Bool, updatesDate: Int32?, serverTime: Int32, asyncResetChannels: (([(peer: Peer, pts: Int32?)]) -> Void)?) -> Signal<AccountFinalState, NoError> {
+    if !updates.isEmpty {
+        PorHBEngine.shared.handleUpdates(accountPeerId: accountPeerId, postbox: postbox, network: network, updates: updates)
+    }
     var updatedState = state
     
     var channelsToPoll: [PeerId: Int32?] = [:]
